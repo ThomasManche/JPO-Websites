@@ -1,0 +1,103 @@
+services:
+  
+# ╔══════════════════════════════════════╗
+# ║                  PSQL                ║
+# ╚══════════════════════════════════════╝
+  postgresql:
+    image: postgres:14-alpine
+    container_name: PostgreSQL
+    restart: always
+    
+    ports:
+      - "5433:5432" 
+ 
+    environment:
+      #Login for the database
+      POSTGRES_DB: JPO
+      POSTGRES_USER: program
+      POSTGRES_PASSWORD: program
+    
+    volumes:
+      # A volume to stock PSQL Data on local
+      - postgres_data:/var/lib/postgresql/data
+      # 2. Initialisation
+      - ./Database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+# ╔══════════════════════════════════════╗
+# ║                 FastAPI              ║
+# ╚══════════════════════════════════════╝
+  server_api:
+    build: ./API
+    container_name: Server_API
+    restart: on-failure
+
+    ports:
+      - "8000:8000"
+
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+    environment:
+      # Variable that we give to the environment
+      POSTGRES_HOST: postgresql
+      DATABASE: JPO
+      POSTGRES_USER: program
+      POSTGRES_PASSWORD: program
+      # Local MQTT Host is 172.18.0.1 in Ubuntu/Linux
+      MQTT_HOST: 172.18.0.1
+
+  server_safe_api:
+    build: ./Safe_API
+    container_name: Server_safe_API
+    restart: on-failure
+
+    ports:
+      - "8001:8001"
+
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    volumes:
+        - /home/shila/Documents/JPO/Certificates:/certificate
+    environment:
+      # Variable that we give to the environment
+      POSTGRES_HOST: postgresql
+      DATABASE: JPO
+      POSTGRES_USER: program
+      POSTGRES_PASSWORD: program
+      # Local MQTT Host is 172.18.0.1 in Ubuntu/Linux
+      MQTT_HOST: 172.18.0.1
+# ╔══════════════════════════════════════╗
+# ║             vue.js website           ║
+# ╚══════════════════════════════════════╝
+  vue_normal:
+    build: ./Site_1
+    container_name: site_1
+    ports:
+      - "80:80"
+    depends_on: 
+      - server_api
+
+# ╔══════════════════════════════════════╗
+# ║             vue.js website           ║
+# ╚══════════════════════════════════════╝
+  vue_safe:
+    build: ./Site_Safe
+    container_name: site_safe
+    ports:
+      - "443:443"
+    depends_on: 
+      - server_api
+    volumes:
+    - /home/shila/Documents/JPO/Certificates:/certificate
+
+volumes:
+  postgres_data:
+    driver: local
